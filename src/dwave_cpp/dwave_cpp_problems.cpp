@@ -2,7 +2,7 @@
 // Created by Humberto Munoz Bauza on 2019-05-17.
 //
 
-#include "dwave_cpp/problems/0989.h"
+#include "dwave_cpp/problems/cell_gadgets.h"
 #include "dwave_cpp/core/util.h"
 #include "dwave_cpp/core/chimera.h"
 
@@ -15,7 +15,6 @@
 #include <sstream>
 
 namespace dwave_cpp{
-#include <dwave_sapi.h>
 
     std::istream& operator>>(std::istream& in, ProblemEntry& problem_entry){
         in  >> problem_entry.i
@@ -35,83 +34,7 @@ namespace dwave_cpp{
         in.eof();
         return in;
     }
-
-    const int _num_cell_entries_0989 = 24;
-    const ProblemEntry array_0989_V6[_num_cell_entries_0989] =
-    {
-            {0,	0, -3},
-            {1,	1, -2},
-            {2,	2,	2},
-            {3,	3,	-3},
-            {4,	4,	1},
-            {5,	5,	3},
-            {6,	6,	-3},
-            {7,	7,	3},
-
-            {0,	4,	3},
-            {0,	5,	-3},
-            {0,	6,	-3},
-            {0,	7,	-3},
-            {1,	4,	-3},
-            {1,	5,	-3},
-            {1,	6,	3},
-            {1,	7,	-3},
-            {2,	4,	-3},
-            {2,	5,	-3},
-            {2,	6,	-3},
-            {2,	7,	-3},
-            {3,	4,	-3},
-            {3,	5,	-3},
-            {3,	6,	-3},
-            {3,	7,	-3}
-    };
-
-    const ProblemEntry array_0989_V1[_num_cell_entries_0989] =
-    {       {0, 0, -2},
-            {1, 1, -2},
-            {2, 2, 2},
-            {3, 3, -3},
-            {4, 4, 1},
-            {5, 5, 3},
-            {6, 6, -3},
-            {7, 7, 3},
-
-            {0, 4, 1},
-            {0, 5, -3},
-            {0, 6, -1},
-            {0, 7, -1},
-            {1, 4, -1},
-            {1, 5, -2},
-            {1, 6, 2},
-            {1, 7, -3},
-            {2, 4, -2},
-            {2, 5, -1},
-            {2, 6, -3},
-            {2, 7, -2},
-            {3, 4, -3},
-            {3, 5, -3},
-            {3, 6, -1},
-            {3, 7, -3}
-    };
-    CellProblem C0989_V1(){
-        CellProblem cell_problem;
-        cell_problem.resize(_num_cell_entries_0989);
-        for(int i = 0; i < _num_cell_entries_0989; ++i){
-            cell_problem[i] = array_0989_V1[i];
-        }
-        return cell_problem;
-    }
-    CellProblem C0989_V6(){
-        CellProblem cell_problem;
-        cell_problem.resize(_num_cell_entries_0989);
-        for(int i = 0; i < _num_cell_entries_0989; ++i){
-            cell_problem[i] = array_0989_V6[i];
-        }
-        return cell_problem;
-    }
-
-
-
+    
     template<typename _int>
     inline bool _cell_cond(_int x, _int y){
         return (x+y)%4 == 0 && y%2==0;
@@ -128,30 +51,6 @@ namespace dwave_cpp{
             }
         }
         return  cell_locations;
-    }
-
-    Problem GenerateCellProblem(const ProblemEntry *cell_problem, int size,
-                                const Solver &solver, const std::set<int> &cell_locations){
-
-        Problem problem;
-        ProblemEntry P0;
-        vector<ProblemEntry>& entries = problem.entries();
-        const std::set<int>& broken_cells = solver.get_broken_cells();
-        for(int i : cell_locations){
-            if(broken_cells.find(i) == broken_cells.end()){
-                int n0 = i*8;
-                for( int k = 0; k < size; ++k){
-                    P0 = cell_problem[k];
-                    ProblemEntry entry = ProblemEntry{
-                            n0 + P0.i,
-                            n0 + P0.j,
-                            P0.value};
-                    entries.push_back(entry);
-                }
-            }
-        }
-
-        return problem;
     }
 
     void EmbedQACProblemEntry(double J, chimera_cell i_cell, chimera_cell j_cell,
@@ -226,6 +125,7 @@ namespace dwave_cpp{
         vector<ProblemEntry>& entries = problem.entries();
 
         const std::set<int>& broken_cells = solver.get_broken_cells();
+        vector<int> ignored_cells;
         for(int i : cell_locations){
             if(broken_cells.find(i) == broken_cells.end()){
                 int n0 = i*8;
@@ -237,8 +137,16 @@ namespace dwave_cpp{
                     entries.push_back(entry);
                 }
             } else {
-                cout << "Ignoring broken cell " << i << "\n";
+                ignored_cells.push_back(i);
+                
             }
+        }
+        if(! ignored_cells.empty()){
+            cout << "Ignoring broken cells: ";
+            for(int i : ignored_cells){
+                cout << i << ", ";
+            }
+            cout << endl;
         }
 
         return problem;
@@ -264,85 +172,6 @@ namespace dwave_cpp{
         }
 
         return init_state;
-    }
-
-    std::vector< vector<short int> >_read_array(const vector<short int> & solution_vec,
-                const Solver& solver, const std::set<int>& cell_locations){
-        std::vector< vector<short int> > instance_results;
-
-        for( int i : cell_locations){
-            int n0 = i*8;
-            instance_results.emplace_back(
-                    &solution_vec[n0], &solution_vec[n0+8] );
-        }
-
-        return instance_results;
-
-    }
-
-    Problem _generate_array(const ProblemEntry cell_problem[], int size, const Solver& solver, int chimera_L){
-
-        Problem problem;
-        ProblemEntry P0;
-        vector<ProblemEntry>& entries = problem.entries();
-        const std::set<int>& broken_cells = solver.get_broken_cells();
-
-        for(int x = 0; x < chimera_L; ++x){
-            for(int y = 0; y < chimera_L; ++y){
-                if(_cell_cond(x, y)){
-                    int i = chimera_L * y + x;
-                    if(broken_cells.find(i) == broken_cells.end()){
-                        int n0 = i*8;
-
-                        for( int k = 0; k < size; ++k){
-                            P0 = cell_problem[k];
-                            entries.push_back(ProblemEntry{
-                                    n0 + P0.i,
-                                    n0 + P0.j,
-                                    P0.value});
-                        }
-                    }
-                }
-            }
-        }
-        return problem;
-    }
-
-    Problem generate_0989_array(const Solver& solver, int chimera_L){
-
-//        Problem problem_0989;
-//        vector<ProblemEntry>& entries = problem_0989.entries();
-//        const std::set<int>& broken_cells = solver.get_broken_cells();
-
-/*        for(int x = 0; x < chimera_L; ++x){
-            for(int y = 0; y < chimera_L; ++y){
-                if((x+y)%2 == 0){
-                    int i = chimera_L * y + x;
-                    if(broken_cells.find(i) == broken_cells.end()){
-                        int n0 = i*8;
-                        for( ProblemEntry P0 : array_0989){
-                            entries.push_back(ProblemEntry{
-                                n0 + P0.i,
-                                n0 + P0.j,
-                                P0.value});
-                        }
-                    }
-                }
-            }
-        }*/
-
-        Problem p = _generate_array(array_0989_V6, _num_cell_entries_0989, solver, chimera_L);
-        return p;
-    }
-
-    Problem generate_0989_v1_array(const Solver& solver, int chimera_L){
-        Problem p = _generate_array(array_0989_V1, _num_cell_entries_0989, solver, chimera_L);
-
-        return p;
-    }
-
-    Problem generate_0989_cells(const Solver& solver, const std::set<int>& cells){
-        return GenerateCellProblem(array_0989_V6, _num_cell_entries_0989, solver, cells);
     }
 
 
@@ -454,50 +283,5 @@ namespace dwave_cpp{
         return arr;
     }
 
-    std::vector< vector<short int> > read_0989(const vector<short int> & solution_vec,
-                                               const Solver& solver, int chimera_L){
-        std::vector< vector<short int> > instance_results;
-        const std::set<int>& broken_cells = solver.get_broken_cells();
-
-        for(int x = 0; x < chimera_L; ++x){
-            for(int y = 0; y < chimera_L; ++y){
-                if(_cell_cond(x, y)){
-                    int i = chimera_L * y + x;
-                    if(broken_cells.find(i) == broken_cells.end()){
-                        int n0 = i*8;
-                        instance_results.emplace_back(
-                                &solution_vec[n0], &solution_vec[n0+8] );
-                    }
-                }
-            }
-        }
-
-
-        return instance_results;
-
-    }
-
-    std::vector< vector<short int> > read_0989(const vector<vector<short int> >& results_vec,
-            const Solver& solver, int chimera_L){
-        std::vector< vector<short int> > instance_results;
-        const std::set<int>& broken_cells = solver.get_broken_cells();
-
-        for( const std::vector<short>& solution : results_vec){
-            for(int x = 0; x < chimera_L; ++x){
-                for(int y = 0; y < chimera_L; ++y){
-                    if(_cell_cond(x, y)){
-                        int i = chimera_L * y + x;
-                        if(broken_cells.find(i) == broken_cells.end()){
-                            int n0 = i*8;
-                            instance_results.emplace_back(
-                                    &solution[n0], &solution[n0+8] );
-                        }
-                    }
-                }
-            }
-        }
-
-        return instance_results;
-
-    }
+  
 }

@@ -8,14 +8,6 @@
 const int CHIMERA_C16_L = 16;
 auto CHIMERA_C16_SOLVER = "C16";
 
-int program_base::parse(int argc, const char **argv) {
-    if(parse_all_options(argc, argv)
-       || check_options())
-        return 1;
-
-    return 0;
-}
-
 generic_dwave_program::generic_dwave_program() : program_base(), dwave_opts("D-Wave Solver Configuration"){
     dwave_opts.add_options()
             ("url", boost::program_options::value<string>(&url), "Solver URL")
@@ -34,7 +26,7 @@ generic_dwave_program::generic_dwave_program() : program_base(), dwave_opts("D-W
             ;
 
     program_options.add(dwave_opts);
-};
+}
 
 int advanced_schedule_program::parse_schedule(){
     regex re(R"((\w+)(\{\s*([.[:s:][:alnum:]]*)\})?)");

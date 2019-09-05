@@ -6,7 +6,7 @@
 #define DW_EXAMPLES_DW_PROG_H
 
 #include <dwave_cpp/dwave_cpp.h>
-#include <dwave_cpp/problems/0989.h>
+#include <dwave_cpp/problems/cell_gadgets.h>
 #include <dwave_cpp/schedules/beta.h>
 #include <iostream>
 #include <fstream>
@@ -23,12 +23,6 @@ namespace po = boost::program_options;
 
 bool cmp_tgts( short s, const string& tgt_str);
 
-enum CellProb{
-    none=0,
-    c0989v1,
-    c0989v6,
-    fer
-};
 enum SchedType{
     def=0,
     lin,
@@ -98,7 +92,6 @@ struct program_base{
 
         return 0;
     }
-    int parse(int argc, const char **argv);
 };
 
 struct generic_dwave_program: public program_base{
@@ -234,8 +227,6 @@ struct advanced_schedule_program : public basic_schedule_program{
 
 
 struct gadget_program : public advanced_schedule_program{
-    typedef int8_t q_int;
-    typedef uint8_t g_uint;
 // Parametric data
     string cell_file;
     string cell_locations_file;

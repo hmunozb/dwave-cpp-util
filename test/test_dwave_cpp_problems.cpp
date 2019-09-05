@@ -2,7 +2,6 @@
 // Created by Humberto Munoz Bauza on 2019-05-17.
 //
 #include <dwave_cpp/dwave_cpp.h>
-#include <dwave_cpp/problems/0989.h>
 #include <iostream>
 
 using namespace std;

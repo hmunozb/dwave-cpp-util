@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.9)
-project(dw_examples)
+project(dw_cpp_util)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
