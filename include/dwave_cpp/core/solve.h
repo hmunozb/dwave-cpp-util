@@ -12,7 +12,7 @@
 namespace dwave_cpp{
     struct sapi_SubmittedProblem;
     struct sapi_IsingResult;
-    typedef vector<vector<vector<short> > > ResultsVec;
+    typedef vector<vector<vector<int8_t> > > ResultsVec;
 
     class ProblemSubmission{
         //todo: add ability to submit a batch of problems
@@ -32,5 +32,9 @@ namespace dwave_cpp{
     };
     ProblemSubmission asyncSolveIsing(Solver& solver, Problem& problem,
             QuantumSolverParameters& params, ProblemSubmission& submission);
+
+    dwave_cpp::ResultsVec run_problem_vector(dwave_cpp::Solver& solver, vector<dwave_cpp::Problem>& prob_vec,
+                                             dwave_cpp::QuantumSolverParameters& params, double timeout);
+
 }
 #endif //DW_EXAMPLES_SOLVE_H

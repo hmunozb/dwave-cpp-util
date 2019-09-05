@@ -9,6 +9,7 @@
 #include <iostream>
 #include <string>
 #include <tuple>
+#include <cassert>
 
 namespace dwave_cpp{
 
@@ -317,7 +318,7 @@ extern "C" {
         for(sapi_IsingResult* ir: ising_results){
             int num_sols = ir->num_solutions;
             int sol_len = ir->solution_len;
-            vector<vector<short> > sol_vec;
+            vector<vector<int8_t> > sol_vec;
             for(int i = 0; i < num_sols; ++i){
                 int* sol_begin = &ir->solutions[i*sol_len];
                 int* sol_end = &ir->solutions[(i+1)*sol_len];
@@ -326,6 +327,19 @@ extern "C" {
             }
             results_vec.push_back(std::move(sol_vec));
         }
+        return results_vec;
+    }
+
+
+    dwave_cpp::ResultsVec run_problem_vector(dwave_cpp::Solver& solver, vector<dwave_cpp::Problem>& prob_vec,
+                                             dwave_cpp::QuantumSolverParameters& params, double timeout){
+        dwave_cpp::ProblemSubmission problem_submission;
+        problem_submission.asyncSolveIsing(solver, prob_vec, params);
+
+        problem_submission.await(timeout);
+        problem_submission.fetch_done();
+        auto results_vec = problem_submission.results_vector();
+
         return results_vec;
     }
 }

@@ -25,7 +25,8 @@ target_link_libraries(connection_example ${dwave_sapi_LIBRARY} dwave_cpp)
 add_executable(dwave_cpp_test test/test_dwave_cpp_problems.cpp)
 target_link_libraries(dwave_cpp_test ${dwave_sapi_LIBRARY} dwave_cpp)
 
-add_executable(bound_canc_0989 src/bound_canc.cpp)
+add_executable(bound_canc_0989 src/dw_prog.cpp src/bound_canc.cpp)
 target_link_libraries(bound_canc_0989 ${dwave_sapi_LIBRARY} dwave_cpp ${Boost_LIBRARIES})
 
-add_executable(dw_examples main.cpp c_examples/make_anneal_schedule.h include/dwave_cpp/core/dwave_cpp_core.h)
+add_executable(chain_qac src/dw_prog.cpp src/chain_qac.cpp)
+target_link_libraries(bound_canc_0989 ${dwave_sapi_LIBRARY} dwave_cpp ${Boost_LIBRARIES})

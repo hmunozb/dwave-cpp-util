@@ -17,6 +17,7 @@ namespace dwave_cpp{
      * unit cells in the solver
      * */
     typedef std::vector<ProblemEntry> CellProblem;
+    typedef std::vector<ProblemEntry> ChainProblem;
     //extern const ProblemEntry[] array_0989_V1;
     //extern const ProblemEntry[] array_0989_V6;
     std::istream& operator>>(std::istream& in, ProblemEntry& problem_entry);
@@ -27,14 +28,18 @@ namespace dwave_cpp{
                                 const Solver &solver, const std::set<int> &cell_locations);
     vector<int> GenerateCellReverseInit(const Solver &solver, const std::set<int> &cell_locations,
                                         const vector<int>& cell_init_state);
-    std::vector< vector<short int> > ReadCellProblem(const vector<short int> & solution_vec,
+    std::vector< vector<int8_t> > ReadCellProblem(const vector<int8_t> & solution_vec,
                                                      const Solver& solver, const std::set<int>& solver_cells);
 
-    vector<short> count_cell_states( const std::vector< vector<short int> >& cell_readouts,
-            std::map<short, int>& counts,
+    vector<int16_t> count_cell_states( const std::vector< vector<int8_t> >& cell_readouts,
+            std::map<int16_t, int>& counts,
             int& total);
 
     std::set<int> CheckerboardCellSet(int chimera_L);
+
+
+    Problem GenerateQACChainProblem(const ChainProblem& chain_problem,
+                                    const Solver& solver);
 
     Problem generate_0989_v1_array(const Solver& solver, int chimera_L);
     Problem generate_0989_array(const Solver& solver, int chimera_L);
