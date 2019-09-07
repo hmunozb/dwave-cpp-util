@@ -29,4 +29,4 @@ add_executable(bound_canc_0989 src/dw_prog.cpp src/bound_canc.cpp)
 target_link_libraries(bound_canc_0989 ${dwave_sapi_LIBRARY} dwave_cpp ${Boost_LIBRARIES})
 
 add_executable(chain_qac src/dw_prog.cpp src/chain_qac.cpp)
-target_link_libraries(bound_canc_0989 ${dwave_sapi_LIBRARY} dwave_cpp ${Boost_LIBRARIES})
+target_link_libraries(chain_qac ${dwave_sapi_LIBRARY} dwave_cpp ${Boost_LIBRARIES})

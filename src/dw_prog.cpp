@@ -240,7 +240,7 @@ dwave_cpp::CellProblem gadget_program::import_cell_problem() {
 
 void gadget_program::write_results(){
     string s(1, output_separator);
-    ofstream f(output_file_pref);
+    ofstream f(output_file);
     //the fill character indicates to operator<<(sched) which separator to use
     f.fill(output_separator);
     f   << "#" << s
@@ -335,6 +335,9 @@ void gadget_program::run(){
         for (const auto &result : results_vec) {
             vector<int16_t> arr = decode_problem(solver, result);
             num_gadget_readouts += arr.size();
+            for(int16_t st : arr){
+                counts[st] += 1;
+            }
             read_arr.push_back(std::move(arr));
         }
     }

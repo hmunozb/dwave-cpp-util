@@ -37,7 +37,7 @@ enum SchedType{
 // Only contains options for basic program functions (--help, --verbose, etc...)
 struct program_base{
     bool verbose=false;
-    string output_file_pref;
+    string output_file;
     char output_separator = ' ';
 
     boost::program_options::options_description program_options;
@@ -48,19 +48,24 @@ struct program_base{
         program_options.add_options()
                 ("help", "Print help message")
                 ("verbose,v", boost::program_options::bool_switch(&verbose), "Enable verbose printing to console during runs")
-                ("output,o", boost::program_options::value<string>(&output_file_pref), "Output file prefix")
+                ("output,o", boost::program_options::value<string>(&output_file), "Output file [required]")
                 ;
     }
 
     // Parses all command line options. Returns 1 if --help was passed
     // indicating that the derived program should terminate
     int parse_all_options(int argc, const char **argv){
-        boost::program_options::store(
-                boost::program_options::command_line_parser(argc, argv)
-                        .options(program_options)
-                        .positional(positional_options).run(),
-                vm);
-        boost::program_options::notify(vm);
+        try {
+            boost::program_options::store(
+                    boost::program_options::command_line_parser(argc, argv)
+                            .options(program_options)
+                            .positional(positional_options).run(),
+                    vm);
+            boost::program_options::notify(vm);
+        } catch(std::exception& e) {
+            cerr << "Error: " << e.what() << endl;
+            return -1;
+        }
 
         if (vm.count("help")) {
             cout << program_options << "\n";
@@ -73,9 +78,13 @@ struct program_base{
     // Checks that the passed options are valid
     // If this is overriden, each derived method should call its parent method before performing its own checks
     virtual int check_options(){
-        boost::filesystem::path output_path(output_file_pref);
+        if(!vm.count("output")){
+            cout << "An output file (--output) is required." << endl;
+            return 1;
+        }
+        boost::filesystem::path output_path(output_file);
         auto output_dir = output_path.parent_path();
-        if (not(boost::filesystem::exists(output_dir))) {
+        if (not(output_dir.empty()) and not(boost::filesystem::exists(output_dir))) {
             cout << "Could not find output directory " << output_dir;
             return 1;
         }
@@ -84,6 +93,9 @@ struct program_base{
             output_separator = '\t';
         } else if (output_ext.compare(".csv")) {
             output_separator = ',';
+        } else if (output_ext.empty()){
+            cout << "Note: no file extension. Outputting tap-separated text to the destination." << endl;
+            output_separator = '\t';
         } else {
             cout << "Note: file extension " << output_ext
                  << "not recognized. Outputting tap-separated data to the destination." << endl;
@@ -183,7 +195,7 @@ struct advanced_schedule_program : public basic_schedule_program{
     double t1 = 0.0;
     double s1 = 0.0;
     double sq = -1.0;
-    double sc = 0.0;
+    double sc = 0.9;
     pair<double, double> pl1;
     pair<double, double> pl2;
 

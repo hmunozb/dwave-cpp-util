@@ -36,12 +36,24 @@ int main(int argc, const char* argv[]) {
     dwave_cpp::Solver solver = connection.get_solver(solver_name);
     const dwave_cpp::sapi_SolverProperties* props = solver.get_solver_properties();
     auto anneal_schedule = props->anneal_schedule;
+    auto anneal_offset = props->anneal_offset;
     if(anneal_schedule){
         cout << "Max number of points:\n\t" <<
             anneal_schedule->max_points << "\n"
             << "Anneal time range:\n\t"
             << "[" << anneal_schedule->min_annealing_time << ", " << anneal_schedule->max_annealing_time << "]\n"
             ;
+    }
+    cout << "Anneal offset properties:" << endl;
+    if(anneal_offset){
+        cout << "\tStep:" << anneal_offset->step << endl;
+        cout <<"\tOffset steps: ";
+        for(int i = 0; i < anneal_offset->ranges_len; ++i)
+            cout << i << ": [" << anneal_offset->ranges[i].min << ", " << anneal_offset->ranges[i].max << "],  ";
+
+        cout << endl;
+    } else{
+        cout << "\t Not found\n";
     }
     const auto& broken_cells = solver.get_broken_cells();
     cout << "List of Broken Cells:\n\t";

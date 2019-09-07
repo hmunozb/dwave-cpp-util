@@ -40,8 +40,27 @@ namespace dwave_cpp{
     vector<int> GenerateCellReverseInit(const Solver &solver, const std::set<int> &cell_locations,
                                         const vector<int>& cell_init_state);
 
-    Problem GenerateQACChainProblem(const ChainProblem& chain_problem,
-                                    const Solver& solver);
+    //Encodes the vertical chain problem using QAC [3, 1, 3] with a penalty. The chains are embedded in a checkerboard pattern
+    //over the top and bottom halves of the lattice, resulting in at most L copies of the QAC encoded chain.
+    //If the penalty is negative, this is interpreted as No-QAC encoding and simply embeds copies of the vertical chain
+    //using the same resources as QAC [3, 1, 3] (i.e. four physical qubits per logical qubit). This embeds at most 4*L
+    //copies of the chain.
+    Problem GenerateQACChainProblem(const Solver& solver, const ChainProblem& chain_problem, double penalty=1.0 );
+
+    //Decodes QAC encoding over all unit cells and returns the 2*L*L decoded lattice, where the vector is indexed
+    //according to  i = (2*(X + L*Y) + B), where (X, Y, B) is the chimera cell bipartition of the physical qubits.
+    vector<int8_t> DecodeQACProblem(const Solver& solver, const vector<int8_t> & solution_vec);
+
+    //Interprets the solution as an embedding of vertical chains on the (X, Y, 0) bipartitions and returns the vector
+    //of gadget bytecodes for each chain. QAC Chain Problems generated with penalty<0 are read this way
+    vector<int16_t> ReadVerticalChainProblem(const Solver& solver, const vector<int8_t> & solution_vec,
+                                             uint16_t chain_len, bool ignore_invalid=true);
+
+    //Interprets the QAC decoding as an encoding of vertical chains and returns the vector
+    //of gadget bytecodes for each chain. QAC Chain Problems encoded with a non-negative penalty are decoded this way.
+    vector< int16_t > ReadBipartEmbedChains(Solver& solver, const vector<int8_t>& count_bipartite_decode,
+
+                                              uint16_t chain_len, bool ignore_invalid=false);
 }
 
 #endif //DW_EXAMPLES_0989_H

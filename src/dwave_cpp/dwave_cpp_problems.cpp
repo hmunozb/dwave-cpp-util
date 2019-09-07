@@ -34,7 +34,7 @@ namespace dwave_cpp{
         in.eof();
         return in;
     }
-    
+
     template<typename _int>
     inline bool _cell_cond(_int x, _int y){
         return (x+y)%4 == 0 && y%2==0;
@@ -55,33 +55,37 @@ namespace dwave_cpp{
 
     void EmbedQACProblemEntry(double J, chimera_cell i_cell, chimera_cell j_cell,
                               vector<ProblemEntry>& physical_entries, double penalty=1.0){
-
-        //Encode QAC for i_cell
         qac_spec qi = qac_qubits(i_cell);
-        for(int32_t n : qi.phys_qs){
-            physical_entries.push_back({n, qi.pen_q, penalty});
-        }
-
         if( i_cell.b() == j_cell.b()){ // Just a field spec
             for(int32_t n : qi.phys_qs){
                 physical_entries.push_back({n, n, J});
             }
-
-        } else { // Embed two different QAC qubits
-            //Encode QAC for j_cell
-            qac_spec qj = qac_qubits(j_cell);
-            for(int32_t n : qj.phys_qs){
-                physical_entries.push_back({n, qj.pen_q, penalty});
+            //Encode QAC for i_cell if penalty is non-negative
+            if(penalty >= 0.0)
+                for(int32_t n : qi.phys_qs){
+                    physical_entries.push_back({n, qi.pen_q, penalty});
+                }
+            else{ //Otherwise, embed a 4th copy after the 3rd physical qubit
+                physical_entries.push_back({qi[2]+1, qi[2]+1, J});
             }
+
+        } else { // Embed two adjacent QAC qubits
+            qac_spec qj = qac_qubits(j_cell);
             // Connect the corresponding physical qubits
             for(int n = 0; n < 3; ++n){
                 physical_entries.push_back({qi[n], qj[n], J});
             }
+            //Encode QAC for j_cell if penalty is non-negative
+            if(penalty >= 0)
+                for(int32_t n : qj.phys_qs){
+                    physical_entries.push_back({n, qj.pen_q, penalty});
+                }
+            else //Otherwise, embed a 4th copy after the 3rd physical qubit
+                physical_entries.push_back({qi[2]+1, qj[2]+1, J} );
         }
     }
 
-    Problem GenerateQACChainProblem(const ChainProblem& chain_problem,
-            const Solver& solver){
+    Problem GenerateQACChainProblem(const Solver& solver, const ChainProblem& chain_problem, double penalty){
         Problem problem;
         vector<ProblemEntry>& entries = problem.entries();
         const std::set<int>& broken_cells = solver.get_broken_cells();
@@ -91,6 +95,23 @@ namespace dwave_cpp{
 
         for( uint16_t x = 0; x < L; ++x){
             uint16_t y0 = (x % 2 ? mid_L : 0);
+            // Check that the chain is uninterrutped
+            bool chain_ok = true;
+            for(uint16_t i = 0; i < mid_L; ++i){
+                uint16_t yi = y0 + i;
+                chimera_cell ci{L, x, yi, 0, 0};
+                uint32_t cci = ci.c();
+                if( broken_cells.find(cci) != broken_cells.end()){
+                    cout << "Ignoring broken cell "<< cci << "\n";
+                    cout << "The chain at x = " << x << ", "
+                        << " y = [" << y0 << ", " << y0 + mid_L - 1 << "] will not be embedded\n";
+                    chain_ok = false;
+                    break;
+                }
+            }
+            if( not chain_ok){
+                continue;
+            }
             for( const ProblemEntry& p : chain_problem){
                 if( p.i >= 8 || p.j >= 8){
                     throw runtime_error("Cannot embed chains longer than 8 qubits with QAC");
@@ -110,7 +131,7 @@ namespace dwave_cpp{
                     cout << "Ignoring broken cell " << ccj << "\n";
                     continue;
                 }
-                EmbedQACProblemEntry(p.value, ci, cj, entries);
+                EmbedQACProblemEntry(p.value, ci, cj, entries, penalty);
             }
         }
 
@@ -138,7 +159,7 @@ namespace dwave_cpp{
                 }
             } else {
                 ignored_cells.push_back(i);
-                
+
             }
         }
         if(! ignored_cells.empty()){
@@ -192,8 +213,7 @@ namespace dwave_cpp{
     // Decodes a solution vector in ising spins according to QAC decoding with 3 physical qubits
     // and 2 logical qubits per cell
     // Returns a vector of 2 * L * L decoded qubits by bipartition indexing (2*(X + L*Y) + B)
-    vector<int8_t> DecodeQACProblem(const vector<short int> & solution_vec,
-                                                  const Solver& solver){
+    vector<int8_t> DecodeQACProblem(const Solver& solver, const vector<int8_t> & solution_vec){
         unsigned int num_qubits = solver.get_solver_properties()->quantum_solver->num_qubits;
         uint16_t L = chimera_l(num_qubits);
         // Constructs the array with invalid qubits (q=3) by default
@@ -204,30 +224,67 @@ namespace dwave_cpp{
                     int8_t lq = 0;
                     chimera_cell c0{L, x, y, b, 0};
                     uint32_t n0 = c0.n();
+                    bool all_qubits_valid = true;
                     for(uint8_t i = 0; i < 3; ++i){
                         short int qi = solution_vec[n0 + i];
                         if(qi == 3){
-                            lq = INT8_MAX;
+                            all_qubits_valid = false;
                             break;
                         }
                         lq += qi;
                     }
-                    if( lq != INT8_MAX){ // All qubits in the bipartition were valid
+                    if( all_qubits_valid){ // All qubits in the bipartition were valid
                         instance_results[c0.b()] = (lq > 0 ? 1 : -1); //Write
                     }
                 }
             }
         }
         return instance_results;
+    }
 
+    vector<int16_t> ReadVerticalChainProblem(const Solver& solver, const vector<int8_t> & solution_vec,
+                                             uint16_t chain_len, bool ignore_invalid){
+        if( chain_len > 8){
+            chain_len = 8;
+            cout << "Warning: chain_len set to 8 (the maximum allowed) for decoding";
+        }
+
+        unsigned int num_qubits = solver.get_solver_properties()->quantum_solver->num_qubits;
+        uint16_t L = chimera_l(num_qubits);
+        // Constructs the array with invalid qubits (q=3) by default
+        vector<int16_t> instance_results;
+        instance_results.reserve(2 * 4 * L);
+
+        for(uint8_t i = 0; i < 3; ++i){
+            for( uint16_t x = 0; x < L; ++x){
+                for(uint8_t h = 0; h < 2; ++h){
+                    int16_t st = 0;
+                    uint16_t y0 = h * L / 2;
+                    for( uint16_t dy = 0; dy < chain_len; ++dy){
+                        chimera_cell c{L, x, uint16_t(y0 + dy), 0, i};
+                        int8_t q = solution_vec[c.n()];
+                        if( not(q == 1 or q == -1)) {
+                            st = -1;
+                            break;
+                        }
+                        uint b = ( q == -1 ? 1 : 0);
+                        st |= (b << unsigned(7 - dy));
+                    }
+                    if( st == -1 and ignore_invalid)
+                        continue;
+                    instance_results.push_back(st);
+                }
+            }
+        }
+        return instance_results;
     }
 
     //Reads the results of vertically QAC embedded 8-qubit chains
-    vector< int16_t > ReadBipartEmbedChains( const vector<int8_t>& count_bipartite_decode,
-            Solver& solver, uint16_t chain_len){
+    vector< int16_t > ReadBipartEmbedChains(Solver& solver, const vector<int8_t>& count_bipartite_decode,
+                                            uint16_t chain_len, bool ignore_invalid){
         if( chain_len > 8){
             chain_len = 8;
-            cout << "Warning: chain_len set to 8 (the maximum allowed) during decoding";
+            cout << "Warning: chain_len set to 8 (the maximum allowed) for decoding";
         }
 
         unsigned int num_qubits = solver.get_solver_properties()->quantum_solver->num_qubits;
@@ -236,7 +293,7 @@ namespace dwave_cpp{
         vector< int16_t > chain_counts;
 
         for( uint16_t x = 0; x < L; ++x){
-            int16_t st = -1;
+            int16_t st = 0;
             uint16_t y0 = (x % 2 ? mid_L : 0);
             for( uint16_t dy = 0; dy < chain_len; ++dy){
                 uint16_t y = y0 + dy;
@@ -249,7 +306,10 @@ namespace dwave_cpp{
                 uint b = ( q == -1 ? 1 : 0);
                 st |= (b << unsigned(7 - dy));
             }
+            if( st == -1 and ignore_invalid)
+                continue;
             chain_counts.push_back(st);
+            //counts[st] += 1;
         }
 
         return chain_counts;
@@ -277,11 +337,11 @@ namespace dwave_cpp{
                 st |= (q << unsigned(7-i));
             }
             arr[k++] = st;
-            counts[st] += 1;
+            //counts[st] += 1;
             total += 1;
         }
         return arr;
     }
 
-  
+
 }
