@@ -196,7 +196,7 @@ extern "C" {
             int q = qubits[i];
             assert(q >= expected_qubit);
             if(q != expected_qubit){
-                broken_qubits.insert(q);
+                broken_qubits.insert(expected_qubit);
                 expected_qubit = q + 1;
             } else{
                 ++expected_qubit;
