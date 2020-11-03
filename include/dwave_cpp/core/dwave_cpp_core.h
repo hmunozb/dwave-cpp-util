@@ -9,6 +9,9 @@
 #include <string>
 #include <memory>
 #include <set>
+#include <map>
+#include <istream>
+//#include "dwave_cpp/dwave_cpp.h"
 
 using namespace std;
 
@@ -49,21 +52,26 @@ namespace dwave_cpp{
     };
 
     typedef sapi_ProblemEntry ProblemEntry ;
+    typedef std::vector<ProblemEntry> ProblemAdj;
+    std::istream& operator>>(std::istream& in, ProblemEntry& problem_entry);
+    std::istream& operator>>(std::istream& in, ProblemAdj& cell_problem);
 
     class Problem{
     public:
         Problem();
+        explicit Problem(ProblemAdj&&);
         Problem(Problem&&) = default;
-        Problem(const Problem&) = delete;
+        explicit Problem(const Problem&);
         //Problem(unsigned int num_entries);
         sapi_Problem* prepare_problem();
-        vector<ProblemEntry>& entries();
+        ProblemAdj& entries();
     private:
-        vector<ProblemEntry> problem_entries;
+        ProblemAdj problem_entries;
         std::unique_ptr<sapi_Problem> problem_ptr;
 
     };
 
+    std::istream& operator>>(std::istream& in, Problem& problem);
 
 
     class Solver{
@@ -92,5 +100,7 @@ namespace dwave_cpp{
     };
 
 
+
+    ProblemAdj import_problem(string input_file);
 }
 #endif //DW_EXAMPLES_DWAVE_CPP_CORE_H

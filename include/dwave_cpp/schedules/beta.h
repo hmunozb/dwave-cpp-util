@@ -12,6 +12,7 @@ namespace dwave_cpp{
 
     std::vector<AnnealSchedulePoint> linear_schedule(double anneal_time);
     std::vector<AnnealSchedulePoint> reverse_anneal_schedule(double reverse_s, double t1, double t_wait);
+    std::vector<AnnealSchedulePoint> reverse_anneal_schedule(double reverse_s, double t1, double t2, double t_wait);
     std::vector<AnnealSchedulePoint> pl3_schedule(std::pair<double, double> pl1,
                                                   std::pair<double, double> pl2, double tf);
     std::vector<AnnealSchedulePoint> ps3_schedule(std::pair<double, double> pl1,

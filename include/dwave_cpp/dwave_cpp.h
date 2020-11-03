@@ -10,6 +10,7 @@
 #include "core/parameters.h"
 #include "core/properties.h"
 #include "core/solve.h"
+#include "core/energy.h"
 
 namespace dwave_cpp{
 #include <dwave_sapi.h>

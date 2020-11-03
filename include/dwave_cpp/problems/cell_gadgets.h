@@ -10,16 +10,15 @@
 #include <map>
 #include <istream>
 namespace dwave_cpp{
-    typedef std::vector<ProblemEntry> CellProblem;
     typedef std::vector<ProblemEntry> ChainProblem;
-    std::istream& operator>>(std::istream& in, ProblemEntry& problem_entry);
-    std::istream& operator>>(std::istream& in, CellProblem& cell_problem);
+
+
     /*
      * Generates a problem that embeds an 8-qubit gadget on a the set of unit cells
      * on a chimera_L x chimera_L  chimera lattice, placing instances only on completely available
      * unit cells in the solver. Cell locations are indexed by i = chimera_L * Y + X.
      * */
-    Problem GenerateCellProblem(const CellProblem& cell_problem,
+    Problem GenerateCellProblem(const ProblemAdj& cell_problem,
                                 const Solver &solver, const std::set<int> &cell_locations);
     std::set<int> CheckerboardCellSet(int chimera_L);
     /*
@@ -55,6 +54,14 @@ namespace dwave_cpp{
     //of gadget bytecodes for each chain. QAC Chain Problems generated with penalty<0 are read this way
     vector<int16_t> ReadVerticalChainProblem(const Solver& solver, const vector<int8_t> & solution_vec,
                                              uint16_t chain_len, bool ignore_invalid=true);
+
+    vector<vector<int8_t>> ReadVerticalChains(const Solver& solver, const vector<int8_t> & solution_vec,
+                                              uint16_t chain_len, uint16_t vert_embed_len, uint8_t max_k);
+
+    vector<int16_t> ClassicalDecode(const vector<vector<int8_t>>& vertical_chains, vector<ProblemEntry>& chain_problem,
+                                    bool ignore_invalid=true);
+
+    vector<int16_t> UnprotectedDecode(const vector<vector<int8_t>>& vertical_chains, bool ignore_invalid=true);
 
     //Interprets the QAC decoding as an encoding of vertical chains and returns the vector
     //of gadget bytecodes for each chain. QAC Chain Problems encoded with a non-negative penalty are decoded this way.

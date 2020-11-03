@@ -25,8 +25,8 @@ target_link_libraries(connection_example ${dwave_sapi_LIBRARY} dwave_cpp)
 add_executable(dwave_cpp_test test/test_dwave_cpp_problems.cpp)
 target_link_libraries(dwave_cpp_test ${dwave_sapi_LIBRARY} dwave_cpp)
 
-add_executable(bound_canc_0989 src/dw_prog.cpp src/bound_canc.cpp)
-target_link_libraries(bound_canc_0989 ${dwave_sapi_LIBRARY} dwave_cpp ${Boost_LIBRARIES})
+add_executable(gadget_run src/dw_prog.cpp src/bound_canc.cpp)
+target_link_libraries(gadget_run ${dwave_sapi_LIBRARY} dwave_cpp ${Boost_LIBRARIES})
 
 add_executable(chain_qac src/dw_prog.cpp src/chain_qac.cpp)
 target_link_libraries(chain_qac ${dwave_sapi_LIBRARY} dwave_cpp ${Boost_LIBRARIES})

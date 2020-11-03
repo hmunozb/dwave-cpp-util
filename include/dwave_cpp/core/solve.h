@@ -5,9 +5,12 @@
 #ifndef DW_EXAMPLES_SOLVE_H
 #define DW_EXAMPLES_SOLVE_H
 
-#include "dwave_cpp_core.h"
+#include "dwave_cpp/core/dwave_cpp_core.h"
 #include "parameters.h"
 #include "properties.h"
+#include <vector>
+
+using namespace std;
 
 namespace dwave_cpp{
     struct sapi_SubmittedProblem;
@@ -19,7 +22,7 @@ namespace dwave_cpp{
     public:
         ~ProblemSubmission();
         void asyncSolveIsing(Solver& solver, vector<Problem>& problem, QuantumSolverParameters& params);
-        void await(double timeout);
+        int await(double timeout);
         void fetch_done();
         vector<sapi_IsingResult*>& get_results();
         ResultsVec results_vector();
@@ -33,7 +36,7 @@ namespace dwave_cpp{
     ProblemSubmission asyncSolveIsing(Solver& solver, Problem& problem,
             QuantumSolverParameters& params, ProblemSubmission& submission);
 
-    dwave_cpp::ResultsVec run_problem_vector(dwave_cpp::Solver& solver, vector<dwave_cpp::Problem>& prob_vec,
+    dwave_cpp::ProblemSubmission run_problem_vector(dwave_cpp::Solver& solver, vector<dwave_cpp::Problem>& prob_vec,
                                              dwave_cpp::QuantumSolverParameters& params, double timeout);
 
 }
