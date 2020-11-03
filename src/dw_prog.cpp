@@ -3,7 +3,9 @@
 //
 
 #include "dw_prog.h"
-
+#include "dwave_cpp/dwave_cpp.h"
+#include <dwave_cpp/problems/cell_gadgets.h>
+using namespace dwave_cpp;
 
 const int CHIMERA_C16_L = 16;
 auto CHIMERA_C16_SOLVER = "C16";
@@ -13,6 +15,7 @@ generic_dwave_program::generic_dwave_program() : program_base(), dwave_opts("D-W
             ("url", boost::program_options::value<string>(&url), "Solver URL")
             ("solver", boost::program_options::value<string>(&solver_str)->default_value(CHIMERA_C16_SOLVER), "Solver type (Default C16)")
             ("token", boost::program_options::value<string>(&token), "Solver Token")
+            ("meek", boost::program_options::bool_switch(&meek), "Suppress found states in stdout")
             ("prompt-retry,R", boost::program_options::bool_switch(&prompt_retries),
              "Enable retry prompt if solver connection fails")
             ("timeout", boost::program_options::value<double>(&timeout)->default_value(60.0),
@@ -66,8 +69,15 @@ int advanced_schedule_program::parse_schedule(){
                 r >>= 1;
             }
         }  else if(vm.count("reverse-init-file")){
-            cerr << "Reverse anneal from file not implemented" << endl;
-            return 1;
+            ifstream ifs(reverse_init_file);
+            stringstream ss;
+            while(ifs.good()){
+                char c = 0;
+                ifs >> c;
+                string s{c};
+                int r = stoi(s);
+                reverse_init_cell_vec.push_back((-2)*(r & 1) + 1);
+            }
         }
         else {
             cerr << "reverse-init-cell required for reverse anneal schedule" << endl;
@@ -78,7 +88,14 @@ int advanced_schedule_program::parse_schedule(){
             t1 = stod(sched_args_v[0]);
             s1 = stod(sched_args_v[1]);
             tw = stod(sched_args_v[2]);
-        }else {
+            t2 = t1;
+        } else if (num_args == 4){
+            t1 = stod(sched_args_v[0]);
+            s1 = stod(sched_args_v[1]);
+            tw = stod(sched_args_v[2]);
+            t2 = stod(sched_args_v[3]);
+        }
+        else {
             cerr << "Invalid arguments for reverse anneal schedule" << endl;
             return 1;
         }
@@ -157,7 +174,7 @@ void advanced_schedule_program::generate_schedule(){
         case rev:
             cout << "\t***Reverse Anneal***";
             cout << "\tInitial State: " << reverse_init_cell << "\n";
-            sched = dwave_cpp::reverse_anneal_schedule(s1, t1, tw);
+            sched = dwave_cpp::reverse_anneal_schedule(s1, t1, t2,tw);
             break;
         case pl2b:
             cout << "\t***2 Piecewise Linear with Quenched Beta***";
@@ -196,6 +213,8 @@ gadget_program::gadget_program() : advanced_schedule_program(), gadget_opts("8-Q
             ("tgts", po::value<vector<string>>(&cell_tgts_strs)->multitoken(), "List of cell locations")
             ("write-cells", po::bool_switch(&write_cells_states), "Write individual cell states in output file "
                                                                   "(May result in large output file)")
+            ("canary-cell", po::value<string>(&canary_cell_file),
+                    "Get the results of a canary problem in addition to the cell problem" )
             ;
     //pd.add("sched", 1).add("output", 1);
 
@@ -226,8 +245,8 @@ int gadget_program::check_options() {
     return 0;
 }
 
-dwave_cpp::CellProblem gadget_program::import_cell_problem() {
-    dwave_cpp::CellProblem cell_problem;
+ProblemAdj gadget_program::import_cell_problem() {
+    ProblemAdj cell_problem;
     ifstream ifs(cell_file);
     ifs >> cell_problem;
     if(J_scale > 0){
@@ -238,21 +257,27 @@ dwave_cpp::CellProblem gadget_program::import_cell_problem() {
     return cell_problem;
 }
 
-void gadget_program::write_results(){
+void gadget_program::write_results(dwave_cpp::ProblemSubmission& submission){
     string s(1, output_separator);
     ofstream f(output_file);
+    auto sapi_results = submission.get_results()[0];
+    long long timing = sapi_results->timing.qpu_access_time;
     //the fill character indicates to operator<<(sched) which separator to use
     f.fill(output_separator);
     f   << "#" << s
         << "n" << s
-        << "tf" << s
+        << "reps" << s
+        << "tf (us)" << s
+        << "qpu t (us)" << s
         << "sq" << s
         << "sc" << s
         << "a" << s
         << "b" << '\n';
     f   << s
         << n << s
+        << reps << s
         << tf << s
+        << timing << s
         << sq << s
         << sc << s
         << a << s
@@ -306,7 +331,7 @@ void gadget_program::write_results(){
 
 void gadget_program::run(){
     if(verbose) cout << "Import cell problem from " << cell_file << endl;
-    dwave_cpp::CellProblem cell_problem = import_cell_problem();
+    gadget_problem = import_cell_problem();
 
     cout << "Generating schedule...\n";
     generate_schedule();
@@ -318,19 +343,26 @@ void gadget_program::run(){
     dwave_cpp::Solver solver = connection.get_solver(solver_str);
     dwave_cpp::QuantumSolverParameters params;
     set_parameters(params);
-    set_schedule_parameters(params);
 
     vector<dwave_cpp::Problem> problem_vector;
-    problem_vector.push_back(encode_problem(solver, cell_problem));
+    dwave_cpp::Problem probl = encode_problem(solver, gadget_problem);
+    for(int r = 0; r < reps; ++r){
+        dwave_cpp::Problem probl_clone((const dwave_cpp::Problem &) probl);
+        problem_vector.push_back(std::move(probl_clone));
+    }
+
+    set_schedule_parameters(solver, params);
 
     num_gadget_readouts = 0;
     int num_tgts = cell_tgts_strs.size();
     tgt_count_vec.resize(num_tgts, 0);
 
+    cout << "Running " << reps << " reps ..." << endl;
+    dwave_cpp::ProblemSubmission subm = run_problem_vector(solver, problem_vector, params, timeout);
+    dwave_cpp::ResultsVec results = subm.results_vector();
+    // Draining iteration over results_vec
     for(int r = 0; r < reps; ++r) {
-        cout << r+1 << "/" << reps << "..." << endl;
-        vector<vector<int8_t> > results_vec;
-        results_vec = run_problem_vector(solver, problem_vector, params, timeout)[0];
+        vector<vector<int8_t> >& results_vec = results[r];
 
         for (const auto &result : results_vec) {
             vector<int16_t> arr = decode_problem(solver, result);
@@ -340,25 +372,31 @@ void gadget_program::run(){
             }
             read_arr.push_back(std::move(arr));
         }
+        for (auto &result : results_vec){
+            all_readouts.push_back(std::move(result));
+        }
     }
     cout << endl;
 
 
-    cout << "Counts: \n";
-    for( const auto& p : counts){
-        cout << "\t" << p.first
-             << "\t\t"   << p.second
-             << "\t\t"   << double(p.second)/num_gadget_readouts << "\n";
-        for(int k = 0; k < num_tgts; ++k){
-            auto& tgt = cell_tgts_strs[k];
+    if(!meek) cout << "Counts: \n";
+
+    for (const auto &p : counts) {
+        if(!meek) cout << "\t" << p.first
+             << "\t\t" << p.second
+             << "\t\t" << double(p.second) / num_gadget_readouts << "\n";
+        for (int k = 0; k < num_tgts; ++k) {
+            auto &tgt = cell_tgts_strs[k];
             tgt_counts[tgt] += 0; //force the tgt_counts map to include zero-count targets
-            if(cmp_tgts(p.first, tgt)){
+            if (cmp_tgts(p.first, tgt)) {
                 tgt_count_vec[k] += p.second;
                 tgt_counts[tgt] += p.second;
             }
         }
     }
-    cout << endl;
+    if (!meek) cout << endl;
+
+
     cout << "Target Counts: \n" ;
     for(int k = 0; k < num_tgts; ++k){
         cout << "\t\t" << cell_tgts_strs[k]
@@ -370,7 +408,10 @@ void gadget_program::run(){
      * OUTPUT TO FILE
      *
      * */
-    write_results();
+    write_results(subm);
+    if(vm.count("raw-output")){
+        write_raw_output();
+    }
 }
 
 bool cmp_tgts( short s, const string& tgt_str){

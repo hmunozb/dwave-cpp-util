@@ -9,6 +9,7 @@
 #include <dwave_cpp/problems/cell_gadgets.h>
 #include <dwave_cpp/schedules/beta.h>
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <map>
 #include <algorithm>
@@ -18,6 +19,7 @@
 #include <boost/tokenizer.hpp>
 #include <regex>
 #include <chrono>
+#include "dwave_cpp/dwave_cpp.h"
 
 namespace po = boost::program_options;
 
@@ -38,8 +40,10 @@ enum SchedType{
 struct program_base{
     bool verbose=false;
     string output_file;
+    string raw_output_file;
     char output_separator = ' ';
 
+    vector<vector<int8_t>> all_readouts;
     boost::program_options::options_description program_options;
     boost::program_options::positional_options_description positional_options;
     boost::program_options::variables_map vm;
@@ -49,6 +53,7 @@ struct program_base{
                 ("help", "Print help message")
                 ("verbose,v", boost::program_options::bool_switch(&verbose), "Enable verbose printing to console during runs")
                 ("output,o", boost::program_options::value<string>(&output_file), "Output file [required]")
+                ("raw-output", boost::program_options::value<string>(&raw_output_file), "Write all collected readouts to this file")
                 ;
     }
 
@@ -102,7 +107,27 @@ struct program_base{
             output_separator = '\t';
         }
 
+        if(vm.count("raw-output")){
+            cout << "Raw output file: "<< raw_output_file << endl;
+            boost::filesystem::path raw_output_path(raw_output_file);
+            auto raw_output_dir = output_path.parent_path();
+            if (not(output_dir.empty()) and not(boost::filesystem::exists(output_dir))) {
+                cerr << "Could not find output directory " << output_dir;
+                return 1;
+            }
+        }
+
         return 0;
+    }
+
+    void write_raw_output(){
+        ofstream f(raw_output_file);
+        for(const auto& readout : all_readouts){
+            for(int8_t s : readout){
+                f << std::setw(2) << int(s) << ' ';
+            }
+            f << '\n';
+        }
     }
 };
 
@@ -110,6 +135,7 @@ struct generic_dwave_program: public program_base{
     string url;
     string token;
     bool prompt_retries=false;
+    bool meek=false;
     string solver_str;
     double timeout = 0.0;
 
@@ -186,6 +212,7 @@ struct advanced_schedule_program : public basic_schedule_program{
     SchedType sched_type=def;
     //CellProb cell_prob = CellProb::c0989v1;
     string reverse_init_cell;
+    string reverse_init_file;
     vector<int> reverse_init_cell_vec;
 
     int a = 0;
@@ -194,6 +221,8 @@ struct advanced_schedule_program : public basic_schedule_program{
     double tw = 0.0;
     double t1 = 0.0;
     double s1 = 0.0;
+    double t2 = 0.0;
+    double s2 = 0.0;
     double sq = -1.0;
     double sc = 0.9;
     pair<double, double> pl1;
@@ -202,6 +231,8 @@ struct advanced_schedule_program : public basic_schedule_program{
     advanced_schedule_program(): basic_schedule_program(), adv_sched_opts("Advanced Schedule Options"){
         adv_sched_opts.add_options()
             ("sched", boost::program_options::value<string>(&sched_str), "Schedule Type")
+            ("reverse-init-cell",boost::program_options::value<string>(&reverse_init_cell), "Reverse Anneal Cell State" )
+            ("reverse-init-file", boost::program_options::value<string>(&reverse_init_file), "Reverse anneal initial state file")
             ;
         program_options.add(adv_sched_opts);
     }
@@ -229,19 +260,19 @@ struct advanced_schedule_program : public basic_schedule_program{
 
     void generate_schedule();
 
-    void set_schedule_parameters(dwave_cpp::QuantumSolverParameters& params){
-        if(sched_type == rev){
-            params.set_reverse_anneal(reverse_init_cell_vec);
-        }
+    virtual void set_schedule_parameters(dwave_cpp::Solver& solver, dwave_cpp::QuantumSolverParameters& params){
         params.set_anneal_schedule(sched);
     }
 };
 
 
 struct gadget_program : public advanced_schedule_program{
-// Parametric data
+//gadget problem spec
     string cell_file;
     string cell_locations_file;
+    string canary_cell_file;
+    dwave_cpp::ProblemAdj gadget_problem;
+// Parametric data
     bool write_cells_states=false;
     vector<int> cell_locations_vec;
     vector<string> cell_tgts_strs;
@@ -255,16 +286,16 @@ struct gadget_program : public advanced_schedule_program{
 
     gadget_program();
     int check_options() override;
-    dwave_cpp::CellProblem import_cell_problem();
+    dwave_cpp::ProblemAdj import_cell_problem();
     virtual dwave_cpp::Problem encode_problem(
             dwave_cpp::Solver& solver,
-            dwave_cpp::CellProblem &cell_problem ) = 0;
+            dwave_cpp::ProblemAdj &cell_problem ) = 0;
 
     virtual vector<int16_t> decode_problem(
             dwave_cpp::Solver& solver,
             const vector<int8_t>& readout) = 0;
-
-    void write_results();
+    //void set_schedule_parameters(dwave_cpp::Solver& solver, dwave_cpp::QuantumSolverParameters& params) override;
+    void write_results(dwave_cpp::ProblemSubmission&);
     void run();
 };
 

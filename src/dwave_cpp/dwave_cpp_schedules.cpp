@@ -85,8 +85,17 @@ namespace dwave_cpp{
         std::vector<AnnealSchedulePoint> sched;
         sched.push_back({0.0, 1.0});
         sched.push_back({t1, reverse_s});
-        sched.push_back({t1 + t_wait, reverse_s});
+        if(t_wait > 0.0) sched.push_back({t1 + t_wait, reverse_s});
         sched.push_back({2.0*t1 + t_wait, 1.0});
+
+        return sched;
+    }
+    std::vector<AnnealSchedulePoint> reverse_anneal_schedule(double reverse_s, double t1, double t2, double t_wait){
+        std::vector<AnnealSchedulePoint> sched;
+        sched.push_back({0.0, 1.0});
+        sched.push_back({t1, reverse_s});
+        if(t_wait > 0.0) sched.push_back({t1 + t_wait, reverse_s});
+        sched.push_back({t1 + t2 + t_wait, 1.0});
 
         return sched;
     }

@@ -11,6 +11,7 @@
 #include <chrono>
 
 #include "dw_prog.h"
+#include "dwave_cpp/dwave_cpp.h"
 
 using namespace std;
 namespace po = boost::program_options;
@@ -18,19 +19,36 @@ namespace fs = boost::filesystem;
 
 struct bound_canc_0989_prog: public gadget_program{
     std::set<int> SolverCells;
+    vector<int> ReverseInitVec;
 
     po::options_description bound_canc_opts;
 
     bound_canc_0989_prog();
 
+    void set_schedule_parameters(dwave_cpp::Solver &solver, dwave_cpp::QuantumSolverParameters &params) override;
     dwave_cpp::Problem encode_problem( dwave_cpp::Solver& solver,
-                                       dwave_cpp::CellProblem &cell_problem) override;
+                                       dwave_cpp::ProblemAdj &cell_problem) override;
     vector<int16_t> decode_problem(
             dwave_cpp::Solver& solver, const vector<int8_t>& readout) override;
 };
 
+void bound_canc_0989_prog::set_schedule_parameters(dwave_cpp::Solver &solver,
+                                                   dwave_cpp::QuantumSolverParameters &params) {
+    if(sched_type == rev){
+        ReverseInitVec = dwave_cpp::GenerateCellReverseInit(solver, SolverCells, reverse_init_cell_vec);
+//        int n = ReverseInitVec.size();
+//        for(int i = 0; i < n; ++i){
+//            int c = ReverseInitVec[i];
+//            if (c!= -1 && c != 1) ReverseInitVec[i] = 1;
+//
+//        }
+        params.set_reverse_anneal(ReverseInitVec);
+    }
+    gadget_program::set_schedule_parameters(solver, params);
+}
+
 dwave_cpp::Problem bound_canc_0989_prog::encode_problem(dwave_cpp::Solver& solver,
-        dwave_cpp::CellProblem &cell_problem) {
+        dwave_cpp::ProblemAdj &cell_problem) {
     if( cell_locations_vec.empty() ){
         SolverCells = dwave_cpp::CheckerboardCellSet(16);
     }

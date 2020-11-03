@@ -5,6 +5,7 @@
 #include "dwave_cpp/problems/cell_gadgets.h"
 #include "dwave_cpp/core/util.h"
 #include "dwave_cpp/core/chimera.h"
+#include "dwave_cpp/core/dwave_cpp_core.h"
 
 #include <vector>
 #include <array>
@@ -16,24 +17,6 @@
 
 namespace dwave_cpp{
 
-    std::istream& operator>>(std::istream& in, ProblemEntry& problem_entry){
-        in  >> problem_entry.i
-            >> problem_entry.j
-            >> problem_entry.value;
-        return in;
-    }
-    std::istream& operator>>(std::istream& in, CellProblem& cell_problem){
-        std::string line;
-        cell_problem.clear();
-        while( std::getline(in, line)){
-            std::istringstream iss( line );
-            ProblemEntry problem_entry;
-            if(iss >> problem_entry)
-                cell_problem.push_back(problem_entry);
-        }
-        in.eof();
-        return in;
-    }
 
     template<typename _int>
     inline bool _cell_cond(_int x, _int y){
@@ -52,6 +35,42 @@ namespace dwave_cpp{
         }
         return  cell_locations;
     }
+
+    bool CheckValidIsingSpins(const vector<int8_t>& spins){
+        for( int8_t s : spins){
+            if((s != 1) && (s != -1) )
+                return false;
+        }
+
+        return true;
+    }
+
+    int16_t IsingSpinsToIntegral16(const vector<int8_t>& spins){
+        size_t n = spins.size();
+        if(n > 15){
+            throw runtime_error("Cannot convert more than 15 ising spins into a i16 code");
+        }
+        int16_t st = 0;
+        for (int16_t i = 0; i < n; ++i) {
+            int8_t s = spins[i];
+            unsigned q;
+            switch(s){
+                case -1:
+                    q=1;
+                    break;
+                case 1:
+                    q=0;
+                    break;
+                default:
+                    st =-1;
+                    return st;
+            }
+            st |= (q << unsigned(7-i));
+        }
+
+        return st;
+    }
+
 
     void EmbedQACProblemEntry(double J, chimera_cell i_cell, chimera_cell j_cell,
                               vector<ProblemEntry>& physical_entries, double penalty=1.0){
@@ -139,7 +158,7 @@ namespace dwave_cpp{
     }
 
 
-    Problem GenerateCellProblem(const CellProblem& cell_problem,
+    Problem GenerateCellProblem(const ProblemAdj& cell_problem,
                                 const Solver &solver, const std::set<int> &cell_locations){
 
         Problem problem;
@@ -180,7 +199,7 @@ namespace dwave_cpp{
         }
 
         int num_qubits = solver.get_solver_properties()->quantum_solver->num_qubits;
-        vector<int> init_state(num_qubits, 3); //initialize unspecified init states at 3
+        vector<int> init_state(num_qubits, 3); //initialize unspecified init states at +1 by default
 
         const std::set<int>& broken_cells = solver.get_broken_cells();
         for(int i : cell_locations){
@@ -191,7 +210,11 @@ namespace dwave_cpp{
                 }
             }
         }
-
+        //Broken qubits are set to 3
+        auto& broken_qubits = solver.get_broken_qubits();
+        for(int i : broken_qubits){
+            init_state[i] = 3;
+        }
         return init_state;
     }
 
@@ -277,6 +300,88 @@ namespace dwave_cpp{
             }
         }
         return instance_results;
+    }
+
+    vector<vector<int8_t>> ReadVerticalChains(const Solver& solver, const vector<int8_t> & solution_vec,
+                                             uint16_t chain_len, uint16_t vert_embed_len, uint8_t max_k){
+        unsigned int num_qubits = solver.get_solver_properties()->quantum_solver->num_qubits;
+        uint16_t L = chimera_l(num_qubits);
+        if(chain_len * vert_embed_len > L){
+            throw runtime_error("chain_len * vertical_embedding_length exceeds the length of the chimera grid");
+        }
+        vector<vector<int8_t>> chain_vec;
+        for(uint16_t x = 0; x < L; ++x){
+            for(uint16_t i = 0; i < vert_embed_len; ++i){
+                uint16_t y0 = i * chain_len;
+                for(uint8_t k = 0; k < max_k; ++k){
+                    vector<int8_t> chain(chain_len);
+                    for(uint16_t dy = 0; dy < chain_len; ++dy){
+                        chimera_cell c{L, x, uint16_t(y0 + dy), 0, k};
+                        chain[dy] = solution_vec[c.n()];
+                    }
+
+                    chain_vec.push_back(std::move(chain));
+                }
+
+            }
+        }
+
+        return chain_vec;
+    }
+
+    vector<int16_t> ClassicalDecode(const vector<vector<int8_t>>& vertical_chains, vector<ProblemEntry>& chain_problem,
+            bool ignore_invalid){
+        size_t num_chains = vertical_chains.size();
+        if( num_chains % 4 != 0){
+            throw runtime_error("Require 4N chains for classical decoding.");
+        }
+        unsigned int n = num_chains / 4;
+        EnergyEval energy{chain_problem};
+        vector<int16_t> decode;
+        decode.reserve(n);
+
+        double e_arr[4];
+        int16_t states[4];
+        for(unsigned i = 0; i < n; ++i){
+            bool valid_ising = true;
+            for(unsigned j = 0; j < 4; ++j){
+                const auto& chain = vertical_chains[4*i + j];
+                int16_t st = IsingSpinsToIntegral16(chain);
+                if(st < 0){
+                    valid_ising=false;
+                    break;
+                } else {
+                    states[j] = st;
+                    e_arr[j] = energy(chain);
+                }
+            }
+            if(!valid_ising) {
+                if(!ignore_invalid)
+                    decode.push_back(-1);
+                continue;
+            }
+            auto min_j = std::min_element(e_arr, e_arr+4) - e_arr;
+            decode.push_back(states[min_j]);
+        }
+
+        return decode;
+    }
+    vector<int16_t> UnprotectedDecode(const vector<vector<int8_t>>& vertical_chains,  bool ignore_invalid){
+        size_t num_chains = vertical_chains.size();
+
+        vector<int16_t> decode;
+        decode.reserve(num_chains);
+        for(const auto& chain: vertical_chains){
+            int16_t st = IsingSpinsToIntegral16(chain);
+            if(st < 0){
+                if(!ignore_invalid)
+                    decode.push_back(st);
+            } else {
+                decode.push_back(st);
+            }
+        }
+
+        return decode;
     }
 
     //Reads the results of vertically QAC embedded 8-qubit chains

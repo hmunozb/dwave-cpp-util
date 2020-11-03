@@ -6,7 +6,10 @@
 #include "dwave_cpp/core/parameters.h"
 #include "dwave_cpp/core/properties.h"
 #include "dwave_cpp/core/solve.h"
+#include "dwave_cpp/core/energy.h"
 #include <iostream>
+#include <sstream>
+#include <fstream>
 #include <string>
 #include <tuple>
 #include <cassert>
@@ -196,7 +199,9 @@ extern "C" {
             int q = qubits[i];
             assert(q >= expected_qubit);
             if(q != expected_qubit){
-                broken_qubits.insert(expected_qubit);
+                //Possibly more than one broken qubit in a row
+                for( int bq = expected_qubit; bq < q; ++bq)
+                    broken_qubits.insert(bq);
                 expected_qubit = q + 1;
             } else{
                 ++expected_qubit;
@@ -221,6 +226,15 @@ extern "C" {
         problem_ptr->len = problem_entries.size();
         problem_ptr->elements = problem_entries.data();
         return problem_ptr.get();
+    }
+
+    Problem::Problem(ProblemAdj && problem_adj) :
+        problem_entries(problem_adj), problem_ptr(new sapi_Problem){
+
+    }
+
+    Problem::Problem(const Problem& problem) : problem_entries(problem.problem_entries), problem_ptr(new sapi_Problem){
+
     }
 
     QuantumSolverParameters::QuantumSolverParameters()
@@ -292,8 +306,8 @@ extern "C" {
         }
     }
 
-    void ProblemSubmission::await(double timeout) {
-        sapi_awaitCompletion((const sapi_SubmittedProblem **) submitted_problem_ptr.data(),
+    int ProblemSubmission::await(double timeout) {
+        return sapi_awaitCompletion((const sapi_SubmittedProblem **) submitted_problem_ptr.data(),
                 submitted_problem_ptr.size(), submitted_problem_ptr.size(), timeout);
     }
     void ProblemSubmission::fetch_done() {
@@ -331,15 +345,86 @@ extern "C" {
     }
 
 
-    dwave_cpp::ResultsVec run_problem_vector(dwave_cpp::Solver& solver, vector<dwave_cpp::Problem>& prob_vec,
+    dwave_cpp::ProblemSubmission run_problem_vector(dwave_cpp::Solver& solver, vector<dwave_cpp::Problem>& prob_vec,
                                              dwave_cpp::QuantumSolverParameters& params, double timeout){
         dwave_cpp::ProblemSubmission problem_submission;
         problem_submission.asyncSolveIsing(solver, prob_vec, params);
 
         problem_submission.await(timeout);
         problem_submission.fetch_done();
-        auto results_vec = problem_submission.results_vector();
+        //auto results_vec = problem_submission.results_vector();
 
-        return results_vec;
+        return problem_submission;
+    }
+
+    std::istream& operator>>(std::istream& in, ProblemEntry& problem_entry){
+        in  >> problem_entry.i
+            >> problem_entry.j
+            >> problem_entry.value;
+        return in;
+    }
+
+    std::istream& operator>>(std::istream& in, ProblemAdj& cell_problem){
+        std::string line;
+        cell_problem.clear();
+        while( std::getline(in, line)){
+            std::istringstream iss( line );
+            ProblemEntry problem_entry;
+            if(iss >> problem_entry)
+                cell_problem.push_back(problem_entry);
+        }
+        in.eof();
+        return in;
+    }
+
+    void import_canary_problem(string file, ProblemAdj& canary_problem, AnnealSchedule& sched ){
+        ifstream ifs(file);
+        std::string line;
+
+        sched.clear();
+        sched.push_back({0.0, 0.0});
+
+        if(std::getline(ifs, line)) {
+            std::istringstream iss( line );
+            double sq, tp;
+            if(iss >> sq >> tp){
+                if(sq > 0.0 && sq < 1.0 )
+                {   sched.push_back({1.0, sq});
+                    sched.push_back({1.0 + tp, sq});
+                    sched.push_back({2.0+tp, 1.0});
+                } else if (sq == 1.0){
+                    sched.push_back({tp, 1.0});
+                } else {
+                    throw runtime_error("Invalid schedule for canary problem.");
+                }
+
+            } else {
+                throw runtime_error("Failed to read canary problem.");
+            }
+        }
+        ifs >> canary_problem;
+    }
+
+    double EnergyEval::operator()(const vector<int8_t> &ising_spins) {
+        double e = 0.0;
+        for(const ProblemEntry& p : problem){
+            e +=  p.value * (p.i == p.j
+                                ?   ising_spins.at(p.i)
+                                :   ising_spins.at(p.i) * ising_spins.at(p.j) ) ;
+        }
+
+        return e;
+    }
+
+    ProblemAdj import_problem(string input_file, double J_scale){
+        ProblemAdj problem_adj;
+        ifstream ifs(input_file);
+        ifs >> problem_adj;
+        if(J_scale > 0){
+            for(auto& p : problem_adj){
+                p.value /= J_scale;
+            }
+        }
+        return problem_adj;
     }
 }
